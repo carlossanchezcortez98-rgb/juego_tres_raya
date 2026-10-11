@@ -3,6 +3,6 @@
 // No pongas aquí la service_role key.
 // Si url o anonKey están vacíos, el juego funciona igual pero sin guardar nada.
 window.SUPABASE_CONFIG = {
-  url: '',      // https://xxxxxxxxxxxx.supabase.co
-  anonKey: '',  // anon public key
+  url: 'https://txzsfjyvtuwptyazetur.supabase.co',
+  anonKey: 'sb_publishable_a6DZMfLK9a0rhAmyAX0Alg_OjYmW6X9',
 };
