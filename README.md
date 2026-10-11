@@ -35,27 +35,32 @@ Abre `index.html` con doble clic en cualquier navegador moderno. No hace falta i
 
 1. Crea un proyecto en [supabase.com](https://supabase.com).
 2. En **SQL Editor**, pega y ejecuta `supabase/schema.sql`.
-3. En **Authentication → Sign In / Providers**, activa **Allow anonymous sign-ins**.
-4. En **Project Settings → API**, copia *Project URL* y *anon public key* en `config.js`.
+3. En **Project Settings → API**, copia *Project URL* y *anon / publishable key* en `config.js`.
 
-La anon key es pública por diseño; la seguridad la dan las políticas RLS del esquema. No uses nunca la `service_role` en el navegador.
+No hay cuentas ni inicio de sesión: no hace falta activar ningún proveedor de Auth. La anon key es pública por diseño; no uses nunca la `service_role` ni la secret key en el navegador.
 
 ### Qué se guarda
 
 | Tabla | Contenido |
 | --- | --- |
-| `players` | Un jugador por navegador (usuario anónimo): alias opcional y marcador acumulado (partidas, victorias, empates, derrotas, puntos). |
+| `players` | Un jugador por navegador: alias opcional y marcador acumulado (partidas, victorias, empates, derrotas, puntos). |
 | `games` | Una fila por partida terminada: modo (`cpu`/`pvp`), quién empezó, resultado, línea ganadora, tablero final, nº de jugadas y duración. |
 | `moves` | Las jugadas de cada partida en orden, para poder repetirla. |
 
 No se guardan partidas abandonadas ni datos personales (email, IP…).
 
+### Cómo funciona la identidad y la seguridad
+
+- Cada navegador genera un id aleatorio (uuid) y lo guarda en `localStorage`. Ese id es la "llave" de su jugador: nadie más lo conoce, porque el ranking nunca lo devuelve.
+- Las tablas no son accesibles desde el cliente (RLS activado y sin políticas). Todo pasa por funciones del servidor: `ensure_player`, `set_alias`, `save_game`, `get_history`, `get_moves` y `get_leaderboard`.
+- `save_game` reproduce la partida en el servidor a partir de las casillas jugadas, así que no se puede falsear un resultado inconsistente con las jugadas.
+- Limitación asumida: al no haber cuentas, cualquiera con la anon key podría crear jugadores y enviar partidas "legales" inventadas. Es un juego casual; si el ranking importara, habría que añadir Auth.
+- Si borras los datos del navegador, empiezas como jugador nuevo.
+
 ### Reglas
 
 - Juegas siempre con **X**: `X` gana = victoria, `O` gana = derrota. Victoria = 3 puntos, empate = 1.
-- Los clientes **no pueden insertar** en `games`/`moves` ni editar contadores: solo la función `save_game` escribe, y reproduce la partida en el servidor a partir de las casillas jugadas, así que el resultado no se puede falsear.
 - La máquina es imbatible, por lo que contra ella lo máximo es empatar; las victorias llegan en el modo 2 jugadores.
-- La identidad anónima vive en el navegador: si borras sus datos, empiezas como jugador nuevo.
 
 ## Notas
 

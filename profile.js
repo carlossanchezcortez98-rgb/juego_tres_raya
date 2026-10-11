@@ -118,7 +118,7 @@
     if (!players) return;
 
     players.forEach((p, i) => {
-      const mine = profile && p.id === profile.id;
+      const mine = p.is_me;
       const row = el('li', `list-row${mine ? ' mine' : ''}`);
       const info = el('div', 'row-info');
       info.append(
