@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Tres en Raya</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="bg" aria-hidden="true">
+    <span class="orb orb-1"></span>
+    <span class="orb orb-2"></span>
+    <span class="orb orb-3"></span>
+    <span class="grid-overlay"></span>
+  </div>
+
+  <!-- Degradados reutilizados por las marcas X / O -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <linearGradient id="grad-x" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#67e8f9"/>
+        <stop offset="1" stop-color="#3b82f6"/>
+      </linearGradient>
+      <linearGradient id="grad-o" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#fbcfe8"/>
+        <stop offset="1" stop-color="#f43f5e"/>
+      </linearGradient>
+    </defs>
+  </svg>
+
+  <main class="game">
+    <header class="header">
+      <h1>Tres <span>en</span> Raya</h1>
+      <p class="tagline">Alinea tres para ganar</p>
+    </header>
+
+    <div class="modes" id="modes" data-active="cpu" role="group" aria-label="Modo de juego">
+      <span class="thumb" aria-hidden="true"></span>
+      <button type="button" class="mode active" data-mode="cpu" aria-pressed="true">Contra la máquina</button>
+      <button type="button" class="mode" data-mode="pvp" aria-pressed="false">2 jugadores</button>
+    </div>
+
+    <section class="scoreboard" aria-label="Marcador">
+      <div class="score score-x" id="card-x">
+        <span class="sym">X</span>
+        <span class="name" id="name-x">Tú</span>
+        <span class="value" id="score-x">0</span>
+      </div>
+      <div class="score score-draw">
+        <span class="sym">=</span>
+        <span class="name">Empates</span>
+        <span class="value" id="score-draw">0</span>
+      </div>
+      <div class="score score-o" id="card-o">
+        <span class="sym">O</span>
+        <span class="name" id="name-o">Máquina</span>
+        <span class="value" id="score-o">0</span>
+      </div>
+    </section>
+
+    <p class="status" id="status" aria-live="polite"></p>
+
+    <div class="board-wrap">
+      <div class="board" id="board" role="grid" aria-label="Tablero"></div>
+      <svg class="win-overlay" id="win-overlay" aria-hidden="true"></svg>
+    </div>
+
+    <div class="actions">
+      <button type="button" id="new-game" class="btn primary">Nueva partida</button>
+      <button type="button" id="reset-score" class="btn ghost">Reiniciar marcador</button>
+    </div>
+  </main>
+
+  <canvas id="confetti" aria-hidden="true"></canvas>
+  <script src="script.js"></script>
+</body>
+</html>
