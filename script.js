@@ -43,10 +43,71 @@ const els = {
   replayBar: document.getElementById('replay-bar'),
   replayInfo: document.getElementById('replay-info'),
   exitReplay: document.getElementById('exit-replay'),
+  soundBtn: document.getElementById('toggle-sound'),
+  soundIcon: document.getElementById('sound-icon'),
 };
 
 let cells = [];
 let renderedScore = { X: 0, O: 0, draw: 0 };
+
+// --- Sonido y vibración (desactivados por defecto; se recuerda la elección) --
+
+const sfx = (() => {
+  const KEY = 'tres-en-raya.sound';
+  let enabled = false;
+  let ctx = null;
+  try { enabled = localStorage.getItem(KEY) === '1'; } catch (err) { /* sin almacenamiento */ }
+
+  function audio() {
+    if (!ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      ctx = new AC();
+    }
+    if (ctx.state === 'suspended') ctx.resume();
+    return ctx;
+  }
+
+  function tone(freq, start, dur, type, gain) {
+    const c = audio();
+    if (!c) return;
+    const t0 = c.currentTime + start;
+    const osc = c.createOscillator();
+    const amp = c.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t0);
+    amp.gain.setValueAtTime(0.0001, t0);
+    amp.gain.exponentialRampToValueAtTime(gain, t0 + 0.01);
+    amp.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(amp).connect(c.destination);
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.05);
+  }
+
+  function melody(notes, type = 'triangle', gain = 0.07) {
+    if (enabled) notes.forEach(([freq, start, dur]) => tone(freq, start, dur, type, gain));
+  }
+
+  function buzz(pattern) {
+    if (enabled && navigator.vibrate) navigator.vibrate(pattern);
+  }
+
+  return {
+    get enabled() { return enabled; },
+    set(on) {
+      enabled = on;
+      try { localStorage.setItem(KEY, on ? '1' : '0'); } catch (err) { /* sin almacenamiento */ }
+      if (on) melody([[660, 0, 0.08], [880, 0.07, 0.1]]);
+    },
+    place(mark) {
+      melody([[mark === 'X' ? 520 : 390, 0, 0.09]]);
+      buzz(10);
+    },
+    win() { melody([[523, 0, 0.12], [659, 0.11, 0.12], [784, 0.22, 0.22]]); buzz([30, 40, 60]); },
+    lose() { melody([[330, 0, 0.15], [262, 0.14, 0.28]], 'sine'); },
+    draw() { melody([[440, 0, 0.12], [440, 0.15, 0.12]], 'sine', 0.05); },
+  };
+})();
 
 // --- Lógica pura -----------------------------------------------------------
 
@@ -94,8 +155,9 @@ function play(index) {
   if (replay || state.over || state.board[index]) return;
 
   if (state.moves.length === 0) state.startedAt = Date.now();
+  const mark = state.current;
   state.moves.push(index);
-  state.board[index] = state.current;
+  state.board[index] = mark;
   const line = getWinLine(state.board);
 
   if (line) {
@@ -117,9 +179,20 @@ function play(index) {
     if (state.mode === 'pvp' || winner === 'X') setTimeout(launchConfetti, 650);
   }
 
+  if (!state.over) sfx.place(mark);
+  else if (!state.winLine) sfx.draw();
+  else if (state.mode === 'pvp' || mark === 'X') sfx.win();
+  else sfx.lose();
+
   if (state.over) saveFinishedGame();
 
   maybeCpuTurn();
+}
+
+// Jugada de la persona (clic o teclado): ignora el turno de la máquina.
+function tryPlay(index) {
+  if (state.mode === 'cpu' && state.current === 'O') return;
+  play(index);
 }
 
 // Guarda la partida terminada sin bloquear el juego; si falla, no pasa nada.
@@ -188,6 +261,7 @@ function startReplay(game, moves) {
   replay = {
     mode: game.mode,
     timer: null,
+    last: null,
     snapshot: {
       ...state,
       board: [...state.board],
@@ -212,6 +286,8 @@ function startReplay(game, moves) {
   const step = () => {
     const { cell, mark } = moves[i++];
     state.board[cell] = mark;
+    replay.last = cell;
+    sfx.place(mark);
     const line = getWinLine(state.board);
     if (line) {
       state.over = true;
@@ -247,10 +323,7 @@ function buildBoard() {
     cell.dataset.index = i;
     cell.dataset.mark = '';
     cell.setAttribute('role', 'gridcell');
-    cell.addEventListener('click', () => {
-      if (state.mode === 'cpu' && state.current === 'O') return;
-      play(i);
-    });
+    cell.addEventListener('click', () => tryPlay(i));
     els.board.appendChild(cell);
     cells.push(cell);
   }
@@ -321,6 +394,8 @@ function render() {
   const humanTurn = !replay && !state.over && !(state.mode === 'cpu' && state.current === 'O');
   els.board.dataset.turn = humanTurn ? state.current : '';
 
+  const lastCell = replay ? replay.last : (state.moves.length ? state.moves[state.moves.length - 1] : null);
+
   cells.forEach((cell, i) => {
     const value = state.board[i] || '';
     if (cell.dataset.mark !== value) {
@@ -332,6 +407,7 @@ function render() {
     cell.classList.toggle('o', value === 'O');
     cell.classList.toggle('win', inWin);
     cell.classList.toggle('dim', Boolean(state.winLine) && !inWin);
+    cell.classList.toggle('last', i === lastCell && !state.winLine);
     cell.disabled = state.over || Boolean(value);
     cell.setAttribute(
       'aria-label',
@@ -358,6 +434,18 @@ function render() {
   els.cardO.classList.toggle('active', !state.over && state.current === 'O');
   els.nameX.textContent = state.mode === 'cpu' ? 'Tú' : 'Jugador X';
   els.nameO.textContent = state.mode === 'cpu' ? 'Máquina' : 'Jugador O';
+
+  // Al terminar, la acción principal invita a la revancha.
+  const finished = state.over && !replay;
+  els.newGame.textContent = finished ? 'Jugar otra vez' : 'Nueva partida';
+  els.newGame.classList.toggle('pulse', finished);
+
+  els.soundIcon.textContent = sfx.enabled ? '🔊' : '🔇';
+  els.soundBtn.setAttribute('aria-pressed', String(sfx.enabled));
+  els.soundBtn.setAttribute(
+    'aria-label',
+    sfx.enabled ? 'Sonido activado. Pulsa para silenciar' : 'Sonido desactivado. Pulsa para activarlo'
+  );
 
   els.modesWrap.dataset.active = state.mode;
   els.modes.forEach((btn) => {
@@ -392,7 +480,7 @@ function launchConfetti() {
   canvas.width = w * dpr;
   canvas.height = h * dpr;
 
-  const colors = ['#22d3ee', '#60a5fa', '#a78bfa', '#f472b6', '#fb7185', '#fde68a', '#ffffff'];
+  const colors = ['#22d3ee', '#a5f3fc', '#818cf8', '#c4b5fd', '#fbbf24', '#fde68a', '#f97316', '#ffffff'];
   const rand = (min, max) => min + Math.random() * (max - min);
   const particles = Array.from({ length: 150 }, () => ({
     x: w / 2 + rand(-40, 40),
@@ -443,6 +531,42 @@ function launchConfetti() {
 els.newGame.addEventListener('click', newGame);
 els.resetScore.addEventListener('click', resetScore);
 els.exitReplay.addEventListener('click', endReplay);
+els.soundBtn.addEventListener('click', () => { sfx.set(!sfx.enabled); render(); });
+
+// Teclado: 1-9 juegan la casilla, flechas mueven el foco, N empieza otra partida.
+const ARROWS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+
+document.addEventListener('keydown', (event) => {
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
+  if (document.querySelector('dialog[open]')) return;
+  const tag = event.target && event.target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+  if (/^[1-9]$/.test(event.key)) {
+    event.preventDefault();
+    const index = Number(event.key) - 1;
+    if (!cells[index].disabled) cells[index].focus();
+    tryPlay(index);
+  } else if (ARROWS[event.key]) {
+    event.preventDefault();
+    const [dx, dy] = ARROWS[event.key];
+    let at = cells.indexOf(document.activeElement);
+    if (at < 0) at = 4;
+    let row = Math.floor(at / 3);
+    let col = at % 3;
+    for (let step = 0; step < 3; step++) {
+      row = (row + dy + 3) % 3;
+      col = (col + dx + 3) % 3;
+      if (!cells[row * 3 + col].disabled) {
+        cells[row * 3 + col].focus();
+        break;
+      }
+    }
+  } else if (event.key === 'n' || event.key === 'N') {
+    event.preventDefault();
+    newGame();
+  }
+});
 els.modes.forEach((btn) => btn.addEventListener('click', () => setMode(btn.dataset.mode)));
 window.addEventListener('resize', () => { if (state.winLine) drawWinLine(false); });
 

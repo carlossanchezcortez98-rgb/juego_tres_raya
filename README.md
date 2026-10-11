@@ -13,6 +13,9 @@ Abre `index.html` con doble clic en cualquier navegador moderno. No hace falta i
 - **Marcador** de victorias de X, de O y empates.
 - **Quién empieza** se alterna en cada partida.
 - **Interfaz cuidada**: fondo animado, tablero de cristal, marcas dibujadas con trazo animado, línea ganadora luminosa y confeti al ganar.
+- **Teclado**: teclas `1`–`9` juegan una casilla, las flechas mueven el foco y `N` empieza otra partida.
+- **Sonido y vibración** opcionales (botón de altavoz; desactivados por defecto, se recuerda la elección).
+- **Colores** pensados para distinguirse bien: X aguamarina frente a O ámbar. La última jugada se resalta con un anillo.
 - **Adaptable** a móvil y respeta la preferencia de "reducir movimiento".
 
 - **Base de datos opcional (Supabase)**: guarda tus partidas, perfil con alias, historial con repetición y ranking global. Sin configurar, el juego funciona igual pero sin guardar nada.

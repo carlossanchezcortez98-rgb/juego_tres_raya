@@ -79,7 +79,13 @@
     return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${s % 60} s`;
   }
 
+  function showLoading(list, emptyMsg) {
+    list.replaceChildren(el('li', 'list-loading', 'Cargando…'));
+    emptyMsg.hidden = true;
+  }
+
   async function loadHistory() {
+    showLoading(els.historyList, els.historyEmpty);
     const games = await db.fetchHistory(10);
     els.historyList.replaceChildren();
     els.historyEmpty.hidden = !games || games.length > 0;
@@ -112,6 +118,7 @@
   }
 
   async function loadRanking() {
+    showLoading(els.rankingList, els.rankingEmpty);
     const players = await db.fetchLeaderboard(10);
     els.rankingList.replaceChildren();
     els.rankingEmpty.hidden = !players || players.length > 0;
