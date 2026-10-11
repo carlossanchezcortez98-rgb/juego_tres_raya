@@ -34,6 +34,10 @@
 
   <main class="game">
     <header class="header">
+      <button type="button" id="open-profile" class="profile-btn" aria-haspopup="dialog">
+        <span aria-hidden="true">👤</span>
+        <span id="profile-label">Perfil</span>
+      </button>
       <h1>Tres <span>en</span> Raya</h1>
       <p class="tagline">Alinea tres para ganar</p>
     </header>
@@ -69,13 +73,79 @@
       <svg class="win-overlay" id="win-overlay" aria-hidden="true"></svg>
     </div>
 
+    <div class="replay-bar" id="replay-bar" hidden>
+      <span id="replay-info">Repetición</span>
+      <button type="button" id="exit-replay" class="btn ghost">Salir de la repetición</button>
+    </div>
+
     <div class="actions">
       <button type="button" id="new-game" class="btn primary">Nueva partida</button>
       <button type="button" id="reset-score" class="btn ghost">Reiniciar marcador</button>
     </div>
+
+    <p class="offline-note" id="offline-note" hidden>
+      Sin base de datos: las partidas no se guardan.
+    </p>
   </main>
 
+  <dialog class="dialog" id="profile-dialog" aria-labelledby="dialog-title">
+    <div class="dialog-head">
+      <h2 id="dialog-title">Tu perfil</h2>
+      <button type="button" class="dialog-close" id="close-profile" aria-label="Cerrar">×</button>
+    </div>
+
+    <div class="offline-msg" id="dialog-offline" hidden>
+      <p><strong>Base de datos sin conectar.</strong></p>
+      <p>Para guardar partidas, ver el historial con repetición y el ranking, conecta tu proyecto de Supabase:</p>
+      <ol>
+        <li>Ejecuta <code>supabase/schema.sql</code> en el SQL Editor.</li>
+        <li>Activa <em>Allow anonymous sign-ins</em>.</li>
+        <li>Rellena <code>url</code> y <code>anonKey</code> en <code>config.js</code>.</li>
+      </ol>
+    </div>
+
+    <div class="tabs" id="dialog-tabs" role="tablist" aria-label="Secciones del perfil">
+      <button type="button" class="tab active" role="tab" data-tab="profile" aria-selected="true">Perfil</button>
+      <button type="button" class="tab" role="tab" data-tab="history" aria-selected="false">Historial</button>
+      <button type="button" class="tab" role="tab" data-tab="ranking" aria-selected="false">Ranking</button>
+    </div>
+
+    <section class="tab-panel" data-panel="profile" role="tabpanel">
+      <form class="alias-form" id="alias-form">
+        <label for="alias-input">Alias</label>
+        <div class="alias-row">
+          <input id="alias-input" name="alias" type="text" maxlength="20" autocomplete="nickname"
+                 placeholder="Anónimo (2–20 caracteres)">
+          <button type="submit" class="btn primary">Guardar</button>
+        </div>
+        <p class="form-msg" id="alias-msg" aria-live="polite"></p>
+      </form>
+      <dl class="stats" id="stats">
+        <div><dt>Partidas</dt><dd id="stat-games">0</dd></div>
+        <div><dt>Victorias</dt><dd id="stat-wins">0</dd></div>
+        <div><dt>Empates</dt><dd id="stat-draws">0</dd></div>
+        <div><dt>Derrotas</dt><dd id="stat-losses">0</dd></div>
+        <div class="stat-wide"><dt>Puntos</dt><dd id="stat-points">0</dd></div>
+      </dl>
+      <p class="hint">Victoria = 3 puntos, empate = 1. Siempre juegas con X.</p>
+    </section>
+
+    <section class="tab-panel" data-panel="history" role="tabpanel" hidden>
+      <ol class="list" id="history-list"></ol>
+      <p class="hint list-empty" id="history-empty" hidden>Aún no has terminado ninguna partida.</p>
+    </section>
+
+    <section class="tab-panel" data-panel="ranking" role="tabpanel" hidden>
+      <ol class="list" id="ranking-list"></ol>
+      <p class="hint list-empty" id="ranking-empty" hidden>Todavía no hay partidas en el ranking.</p>
+    </section>
+  </dialog>
+
   <canvas id="confetti" aria-hidden="true"></canvas>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js"></script>
+  <script src="config.js"></script>
+  <script src="db.js"></script>
   <script src="script.js"></script>
+  <script src="profile.js"></script>
 </body>
 </html>

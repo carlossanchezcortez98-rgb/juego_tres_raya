@@ -5,6 +5,7 @@ const WIN_LINES = [
 ];
 
 const CPU_DELAY_MS = 550;
+const REPLAY_STEP_MS = 650;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 const state = {
@@ -16,7 +17,12 @@ const state = {
   score: { X: 0, O: 0, draw: 0 },
   startingPlayer: 'X',
   cpuTimer: null,
+  moves: [], // casillas jugadas en orden (se guardan en la base de datos)
+  startedAt: null,
 };
+
+// Repetición en curso: { snapshot, mode, timer } o null.
+let replay = null;
 
 const els = {
   board: document.getElementById('board'),
@@ -34,6 +40,9 @@ const els = {
   modesWrap: document.getElementById('modes'),
   modes: document.querySelectorAll('.mode'),
   confetti: document.getElementById('confetti'),
+  replayBar: document.getElementById('replay-bar'),
+  replayInfo: document.getElementById('replay-info'),
+  exitReplay: document.getElementById('exit-replay'),
 };
 
 let cells = [];
@@ -82,8 +91,10 @@ function bestMove(board) {
 // --- Flujo de juego --------------------------------------------------------
 
 function play(index) {
-  if (state.over || state.board[index]) return;
+  if (replay || state.over || state.board[index]) return;
 
+  if (state.moves.length === 0) state.startedAt = Date.now();
+  state.moves.push(index);
   state.board[index] = state.current;
   const line = getWinLine(state.board);
 
@@ -106,11 +117,26 @@ function play(index) {
     if (state.mode === 'pvp' || winner === 'X') setTimeout(launchConfetti, 650);
   }
 
+  if (state.over) saveFinishedGame();
+
   maybeCpuTurn();
 }
 
+// Guarda la partida terminada sin bloquear el juego; si falla, no pasa nada.
+function saveFinishedGame() {
+  if (!db.configured) return;
+  db.saveGame({
+    mode: state.mode,
+    startingPlayer: state.startingPlayer,
+    cells: state.moves.slice(),
+    durationMs: Date.now() - state.startedAt,
+  }).then((id) => {
+    if (id) window.dispatchEvent(new CustomEvent('game-saved'));
+  });
+}
+
 function maybeCpuTurn() {
-  if (state.mode !== 'cpu' || state.over || state.current !== 'O') return;
+  if (replay || state.mode !== 'cpu' || state.over || state.current !== 'O') return;
   state.cpuTimer = setTimeout(() => {
     state.cpuTimer = null;
     play(bestMove(state.board));
@@ -118,11 +144,14 @@ function maybeCpuTurn() {
 }
 
 function newGame() {
+  endReplay();
   clearTimeout(state.cpuTimer);
   state.cpuTimer = null;
   state.board = Array(9).fill(null);
   state.over = false;
   state.winLine = null;
+  state.moves = [];
+  state.startedAt = null;
   // Alterna quién empieza para que la partida sea justa.
   state.startingPlayer = state.startingPlayer === 'X' ? 'O' : 'X';
   state.current = state.startingPlayer;
@@ -133,6 +162,7 @@ function newGame() {
 }
 
 function setMode(mode) {
+  endReplay(); // antes de tocar el estado: restaura la partida y no pisa lo de abajo
   state.mode = mode;
   state.score = { X: 0, O: 0, draw: 0 };
   state.startingPlayer = 'O'; // newGame() lo alterna a 'X'
@@ -140,8 +170,71 @@ function setMode(mode) {
 }
 
 function resetScore() {
+  endReplay();
   state.score = { X: 0, O: 0, draw: 0 };
   render();
+}
+
+// --- Repetición de partidas guardadas -------------------------------------
+
+// moves: [{ cell, mark }] en orden; game: { mode, starting_player }.
+// Reproduce la partida sobre el tablero y, al salir, restaura la partida en curso.
+function startReplay(game, moves) {
+  if (!moves || moves.length === 0) return;
+  endReplay();
+  clearTimeout(state.cpuTimer);
+  state.cpuTimer = null;
+
+  replay = {
+    mode: game.mode,
+    timer: null,
+    snapshot: {
+      ...state,
+      board: [...state.board],
+      moves: [...state.moves],
+      score: { ...state.score },
+      winLine: state.winLine ? [...state.winLine] : null,
+    },
+  };
+
+  stopConfetti();
+  state.board = Array(9).fill(null);
+  state.over = false;
+  state.winLine = null;
+  state.current = game.starting_player;
+
+  els.replayInfo.textContent = game.mode === 'cpu' ? 'Repetición · contra la máquina' : 'Repetición · 2 jugadores';
+  els.replayBar.hidden = false;
+  replayBoardIntro();
+  render();
+
+  let i = 0;
+  const step = () => {
+    const { cell, mark } = moves[i++];
+    state.board[cell] = mark;
+    const line = getWinLine(state.board);
+    if (line) {
+      state.over = true;
+      state.winLine = line;
+    } else if (isFull(state.board)) {
+      state.over = true;
+    } else {
+      state.current = mark === 'X' ? 'O' : 'X';
+    }
+    render();
+    if (i < moves.length) replay.timer = setTimeout(step, REPLAY_STEP_MS);
+  };
+  replay.timer = setTimeout(step, REPLAY_STEP_MS);
+}
+
+function endReplay() {
+  if (!replay) return;
+  clearTimeout(replay.timer);
+  Object.assign(state, replay.snapshot);
+  replay = null;
+  els.replayBar.hidden = true;
+  render();
+  maybeCpuTurn();
 }
 
 // --- Render ----------------------------------------------------------------
@@ -178,14 +271,16 @@ function markSvg(value) {
 }
 
 function statusInfo() {
+  const mode = replay ? replay.mode : state.mode;
   if (state.winLine) {
     const winner = state.board[state.winLine[0]];
-    const text = state.mode === 'cpu'
+    const text = mode === 'cpu'
       ? (winner === 'X' ? '🎉 ¡Has ganado!' : 'Ha ganado la máquina')
       : `🎉 ¡Gana ${winner}!`;
     return { text, state: `win-${winner.toLowerCase()}` };
   }
   if (state.over) return { text: 'Empate', state: 'draw' };
+  if (replay) return { text: `Jugada de ${state.current}`, state: state.current.toLowerCase() };
   if (state.mode === 'cpu') {
     return state.current === 'X'
       ? { text: 'Tu turno', state: 'x' }
@@ -223,7 +318,7 @@ function bump(el) {
 }
 
 function render() {
-  const humanTurn = !state.over && !(state.mode === 'cpu' && state.current === 'O');
+  const humanTurn = !replay && !state.over && !(state.mode === 'cpu' && state.current === 'O');
   els.board.dataset.turn = humanTurn ? state.current : '';
 
   cells.forEach((cell, i) => {
@@ -285,7 +380,7 @@ function stopConfetti() {
 }
 
 function launchConfetti() {
-  if (!state.over || !state.winLine) return;
+  if (replay || !state.over || !state.winLine) return;
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   stopConfetti();
 
@@ -347,6 +442,7 @@ function launchConfetti() {
 
 els.newGame.addEventListener('click', newGame);
 els.resetScore.addEventListener('click', resetScore);
+els.exitReplay.addEventListener('click', endReplay);
 els.modes.forEach((btn) => btn.addEventListener('click', () => setMode(btn.dataset.mode)));
 window.addEventListener('resize', () => { if (state.winLine) drawWinLine(false); });
 
